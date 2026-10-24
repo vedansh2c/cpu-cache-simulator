@@ -1,0 +1,4 @@
+# Optional fallback: docker compose -f docker-compose.yml -f compose.amd64.yml up --build
+services:
+  worker:
+    platform: linux/amd64

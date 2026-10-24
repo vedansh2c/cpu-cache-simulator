@@ -1,0 +1,16 @@
+{
+  "name": "32 KiB L1 / 256 KiB L2 baseline",
+  "cpu_model": "TimingSimpleCPU",
+  "cores": 1,
+  "clock_mhz": 2000,
+  "l1i_kib": 32,
+  "l1d_kib": 32,
+  "l2_kib": 256,
+  "l1_assoc": 2,
+  "l2_assoc": 8,
+  "line_bytes": 64,
+  "l1_latency_cycles": 2,
+  "l2_latency_cycles": 20,
+  "memory_mib": 512,
+  "memory_model": "DDR3_1600_8x8"
+}

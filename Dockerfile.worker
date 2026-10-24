@@ -1,0 +1,42 @@
+# syntax=docker/dockerfile:1
+# Preserve compiler artifacts even when the Docker daemon or build is interrupted.
+FROM ubuntu:24.04 AS gem5
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential crossbuild-essential-amd64 git ca-certificates scons python3-dev python3-venv \
+    libprotobuf-dev protobuf-compiler libboost-all-dev libhdf5-dev \
+    libpng-dev zlib1g-dev pkg-config libgoogle-perftools-dev \
+    && rm -rf /var/lib/apt/lists/*
+ARG BUILD_JOBS=2
+RUN git clone --depth 1 --branch v25.1.0.1 https://github.com/gem5/gem5.git /opt/gem5 \
+    && test "$(git -C /opt/gem5 rev-parse HEAD)" = "c8222cc67a399bfc01e8658dd14b30d5bfd634f9"
+WORKDIR /opt/gem5
+ARG TARGETARCH
+RUN --mount=type=cache,id=cachelab-gem5-25.1.0.1-${TARGETARCH},target=/opt/gem5/build,sharing=locked \
+    scons build/X86/gem5.opt -j${BUILD_JOBS} --ignore-style --without-tcmalloc \
+    && install -D -m 755 build/X86/gem5.opt /opt/gem5/bin/gem5.opt \
+    && /opt/gem5/bin/gem5.opt --version \
+    && git rev-parse HEAD > /opt/gem5/REVISION
+
+FROM gem5 AS worker
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app/backend \
+    DATA_DIR=/data PATH=/opt/venv/bin:$PATH GEM5_BINARY=/opt/gem5/bin/gem5.opt
+WORKDIR /app
+COPY requirements.txt .
+RUN python3 -m venv /opt/venv && pip install --no-cache-dir -r requirements.txt \
+    && useradd --uid 10001 --create-home app && mkdir /data /opt/workloads \
+    && chown app:app /data
+COPY workloads /app/workloads
+# x86-64 baseline, no host ISA extensions or vectorization; static non-PIE for SE.
+RUN x86_64-linux-gnu-gcc -std=c11 -O2 -Wall -Wextra -Werror -static -no-pie -march=x86-64 \
+    -fno-tree-vectorize workloads/matrix.c -o /opt/workloads/matrix
+RUN x86_64-linux-gnu-gcc -std=c11 -O2 -Wall -Wextra -Werror -static -no-pie -march=x86-64 \
+    -fno-tree-vectorize workloads/memory.c -o /opt/workloads/memory
+COPY simulation /app/simulation
+COPY cache_model /app/cache_model
+RUN g++ -std=c++20 -O2 -Wall -Wextra -Wpedantic -Werror \
+    cache_model/cache_model.cpp -o /opt/workloads/cache_model
+COPY examples /app/examples
+COPY backend /app/backend
+USER app
+CMD ["python", "-m", "app.worker"]

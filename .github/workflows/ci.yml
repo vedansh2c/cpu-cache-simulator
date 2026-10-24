@@ -1,0 +1,36 @@
+name: Validate
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -q
+      - run: ruff check backend simulation tests scripts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci && npm test && npm run build
+        working-directory: frontend
+      - run: docker compose config --quiet
+  simulator:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up --build -d
+      - run: python3 scripts/smoke.py --url http://localhost:8080
+      - run: python3 scripts/study.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: measured-study
+          path: build/study.json
+      - if: always()
+        run: docker compose logs && docker compose down

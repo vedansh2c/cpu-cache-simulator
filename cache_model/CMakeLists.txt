@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.20)
+project(cache_model LANGUAGES CXX)
+add_executable(cache_model cache_model.cpp)
+target_compile_features(cache_model PRIVATE cxx_std_20)
+target_compile_options(cache_model PRIVATE -Wall -Wextra -Wpedantic -Werror)
